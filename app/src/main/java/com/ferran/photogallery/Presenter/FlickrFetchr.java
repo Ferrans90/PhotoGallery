@@ -25,6 +25,7 @@ import java.util.List;
 public class FlickrFetchr {
     private static final String TAG = "FlickrFetchr";
     private static final String API_KEY = "9f77ac70cca192b52004b04518de4ab5";
+    private static int page = 1;
 
     public byte[] getUrlBytes(String urlSpec) throws IOException {
         URL url = new URL(urlSpec);
@@ -56,16 +57,20 @@ public class FlickrFetchr {
 
         try {
             String url = Uri.parse("https://api.flickr.com/services/rest/").buildUpon()
-                    .appendQueryParameter("method", "flickr.photos.getRecent")
-                    .appendQueryParameter("api_key", API_KEY)
-                    .appendQueryParameter("format", "json")
-                    .appendQueryParameter("nojsoncallback", "1")
-                    .appendQueryParameter("extras", "url_s")
-                    .build().toString();
+                .appendQueryParameter("method", "flickr.photos.getRecent")
+                .appendQueryParameter("api_key", API_KEY)
+                .appendQueryParameter("format", "json")
+                .appendQueryParameter("nojsoncallback", "1")
+                .appendQueryParameter("extras", "url_s")
+                .appendQueryParameter("page", String.valueOf(page))
+                .build().toString();
+            Log.i(TAG, url);
             String jsonString = getUrlSring(url);
             Log.i(TAG, "Received JSON: " + jsonString);
             JSONObject jsonObject = new JSONObject(jsonString);
             parseItems(items, jsonObject);
+            ++page;
+            Log.i(TAG, "Page: " + page);
         } catch (JSONException je) {
             Log.e(TAG, "Failed to parse JSON", je);
         } catch (IOException ioe) {
@@ -76,7 +81,7 @@ public class FlickrFetchr {
     }
 
     private void parseItems(List<GalleryItem> items, JSONObject jsonObject)
-            throws IOException, JSONException {
+        throws IOException, JSONException {
         JSONObject photosJsonObject = jsonObject.getJSONObject("photos");
         JSONArray photoJsonArray = photosJsonObject.getJSONArray("photo");
         Gson gson = new Gson();

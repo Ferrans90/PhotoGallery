@@ -7,6 +7,7 @@ import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
 import android.support.v7.widget.GridLayoutManager;
 import android.support.v7.widget.RecyclerView;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -25,6 +26,8 @@ public class PhotoGalleryFragment extends Fragment {
     private static final String TAG = "PhotoGalleryFragment";
     private RecyclerView mPhotoRecyclerView;
     private List<GalleryItem> mItems = new ArrayList<>();
+    private PhotoAdapter mPhotoAdapter;
+    private int lastPosition = 100;
 
     public PhotoGalleryFragment() {
         // Required empty public constructor
@@ -53,7 +56,19 @@ public class PhotoGalleryFragment extends Fragment {
 
         mPhotoRecyclerView = (RecyclerView) v.findViewById(R.id.fragment_photo_gallery_recycler_view);
         mPhotoRecyclerView.setLayoutManager(new GridLayoutManager(getActivity(), 3));
-        setupAdapter();
+        mPhotoRecyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrollStateChanged(RecyclerView recyclerView, int newState) {
+                GridLayoutManager gridLayoutManager = (GridLayoutManager) recyclerView.getLayoutManager();
+                int lastPosition = gridLayoutManager.findLastCompletelyVisibleItemPosition();
+                if (newState == RecyclerView.SCROLL_STATE_IDLE && lastPosition + 1 == mItems.size()) {
+                    new FetchItemsTask().execute();
+                    updateUI();
+                }
+            }
+        });
+        //setupAdapter();
+        updateUI();
         return v;
     }
 
@@ -63,6 +78,16 @@ public class PhotoGalleryFragment extends Fragment {
         }
     }
 
+    private void updateUI() {
+        if (mPhotoAdapter == null) {
+            mPhotoAdapter = new PhotoAdapter(mItems);
+            mPhotoRecyclerView.setAdapter(mPhotoAdapter);
+        } else {
+            mPhotoAdapter.setGalleryItems(mItems);
+            mPhotoAdapter.notifyItemRangeInserted(lastPosition, 100);
+            lastPosition += 100;
+        }
+    }
 
     private class FetchItemsTask extends AsyncTask<Void, Void, List<GalleryItem>> {
         @Override
@@ -72,8 +97,9 @@ public class PhotoGalleryFragment extends Fragment {
 
         @Override
         protected void onPostExecute(List<GalleryItem> galleryItems) {
-            mItems = galleryItems;
-            setupAdapter();
+            mItems.addAll(galleryItems);
+            //setupAdapter();
+            updateUI();
         }
     }
 
@@ -96,6 +122,10 @@ public class PhotoGalleryFragment extends Fragment {
 
         public PhotoAdapter(List<GalleryItem> galleryItems) {
             mGalleryItems = galleryItems;
+        }
+
+        private void setGalleryItems(List<GalleryItem> items) {
+            mGalleryItems = items;
         }
 
         @Override
