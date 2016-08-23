@@ -5,9 +5,6 @@ import android.util.Log;
 
 import com.ferran.photogallery.Model.GalleryItem;
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.internal.ObjectConstructor;
-import com.google.gson.reflect.TypeToken;
 
 import org.json.JSONArray;
 import org.json.JSONException;

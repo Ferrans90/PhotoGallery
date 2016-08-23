@@ -1,8 +1,13 @@
 package com.ferran.photogallery.Presenter;
 
 
+import android.content.res.Resources;
+import android.graphics.Bitmap;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Handler;
 import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
 import android.support.v7.widget.GridLayoutManager;
@@ -11,6 +16,8 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.ferran.photogallery.Model.GalleryItem;
@@ -27,6 +34,7 @@ public class PhotoGalleryFragment extends Fragment {
     private RecyclerView mPhotoRecyclerView;
     private List<GalleryItem> mItems = new ArrayList<>();
     private PhotoAdapter mPhotoAdapter;
+    private ThumbnailDownloader<PhotoHolder> mThumbnailDownloader;
     private int lastPosition = 100;
 
     public PhotoGalleryFragment() {
@@ -47,6 +55,38 @@ public class PhotoGalleryFragment extends Fragment {
         super.onCreate(savedInstanceState);
         setRetainInstance(true);
         new FetchItemsTask().execute();
+
+        Handler responseHandler = new Handler();
+        mThumbnailDownloader = new ThumbnailDownloader<>(responseHandler);
+        mThumbnailDownloader.setThumbnailDownloadListener(new ThumbnailDownloader.ThumbnailDownloadListener<PhotoHolder>() {
+            @Override
+            public void onThumbnailDownloaded(PhotoHolder target, Bitmap thumbnail) {
+                Drawable drawable = new BitmapDrawable(getResources(), thumbnail);
+                target.bindDrawable(drawable);
+            }
+        });
+        mThumbnailDownloader.start();
+        mThumbnailDownloader.getLooper();
+        Log.i(TAG, "Background thread started");
+    }
+
+    @Override
+    public void onDetach() {
+        super.onDetach();
+        mPhotoAdapter = null;
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        mThumbnailDownloader.quit();
+        Log.i(TAG, "Background thread destroyed");
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        mThumbnailDownloader.clearQueue();
     }
 
     @Override
@@ -55,13 +95,26 @@ public class PhotoGalleryFragment extends Fragment {
         View v = inflater.inflate(R.layout.fragment_photo_gallery, container, false);
 
         mPhotoRecyclerView = (RecyclerView) v.findViewById(R.id.fragment_photo_gallery_recycler_view);
+        // Default: E/RecyclerView: No layout manager attached; skipping layout
         mPhotoRecyclerView.setLayoutManager(new GridLayoutManager(getActivity(), 3));
+        //
+        mPhotoRecyclerView.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override
+            public void onGlobalLayout() {
+                int width = mPhotoRecyclerView.getWidth();
+                int column = Math.round(width / 360);
+                mPhotoRecyclerView.setLayoutManager(new GridLayoutManager(getActivity(), column));
+                mPhotoRecyclerView.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+            }
+        });
+        //mPhotoRecyclerView.setLayoutManager(new GridLayoutManager(getActivity(), 3));
         mPhotoRecyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrollStateChanged(RecyclerView recyclerView, int newState) {
                 GridLayoutManager gridLayoutManager = (GridLayoutManager) recyclerView.getLayoutManager();
-                int lastPosition = gridLayoutManager.findLastCompletelyVisibleItemPosition();
-                if (newState == RecyclerView.SCROLL_STATE_IDLE && lastPosition + 1 == mItems.size()) {
+                int tempLastPosition = gridLayoutManager.findLastCompletelyVisibleItemPosition();
+                if (newState == RecyclerView.SCROLL_STATE_IDLE && tempLastPosition + 1 == mItems.size()) {
+                    lastPosition = tempLastPosition + 1;
                     new FetchItemsTask().execute();
                     updateUI();
                 }
@@ -82,10 +135,11 @@ public class PhotoGalleryFragment extends Fragment {
         if (mPhotoAdapter == null) {
             mPhotoAdapter = new PhotoAdapter(mItems);
             mPhotoRecyclerView.setAdapter(mPhotoAdapter);
+            Log.d(TAG, "new Adapter.");
         } else {
             mPhotoAdapter.setGalleryItems(mItems);
-            mPhotoAdapter.notifyItemRangeInserted(lastPosition, 100);
-            lastPosition += 100;
+            mPhotoAdapter.notifyItemRangeInserted(lastPosition, 100);// 100 pages number
+            Log.d(TAG, "old adapter");
         }
     }
 
@@ -104,16 +158,17 @@ public class PhotoGalleryFragment extends Fragment {
     }
 
     private class PhotoHolder extends RecyclerView.ViewHolder {
-        private TextView mTitleView;
+        private ImageView mItemImageView;
 
         public PhotoHolder(View itemView) {
             super(itemView);
 
-            mTitleView = (TextView) itemView;
+            mItemImageView
+                = (ImageView) itemView.findViewById(R.id.fragment_photo_gallery_image_view);
         }
 
-        public void bindGalleryItem(GalleryItem item) {
-            mTitleView.setText(item.toString());
+        public void bindDrawable(Drawable drawable) {
+            mItemImageView.setImageDrawable(drawable);
         }
     }
 
@@ -136,13 +191,17 @@ public class PhotoGalleryFragment extends Fragment {
         @Override
         public void onBindViewHolder(PhotoHolder holder, int position) {
             GalleryItem galleryItem = mGalleryItems.get(position);
-            holder.bindGalleryItem(galleryItem);
+            Drawable placeholder = getResources().getDrawable(R.drawable.bill_up_close);
+            holder.bindDrawable(placeholder);
+            mThumbnailDownloader.queueThumbnail(holder, galleryItem.getUrl());
         }
 
         @Override
         public PhotoHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-            TextView textView = new TextView(getActivity());
-            return new PhotoHolder(textView);
+            LayoutInflater inflater = LayoutInflater.from(getActivity());
+            View v = inflater.inflate(R.layout.gallery_item, parent, false);
+            return new PhotoHolder(v);
+
         }
     }
 
