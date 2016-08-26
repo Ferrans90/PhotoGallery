@@ -18,6 +18,7 @@ import android.view.*;
 import android.widget.ImageView;
 
 import android.widget.ProgressBar;
+
 import com.ferran.photogallery.Model.GalleryItem;
 import com.ferran.photogallery.R;
 
@@ -55,16 +56,15 @@ public class PhotoGalleryFragment extends Fragment {
         setHasOptionsMenu(true);
         updateItems();
 
-        Intent i = PollService.newIntent(getActivity());
-        getActivity().startService(i);
-
         Handler responseHandler = new Handler();
         mThumbnailDownloader = new ThumbnailDownloader<>(responseHandler);
         mThumbnailDownloader.setThumbnailDownloadListener(new ThumbnailDownloader.ThumbnailDownloadListener<PhotoHolder>() {
             @Override
             public void onThumbnailDownloaded(PhotoHolder target, Bitmap thumbnail) {
-                Drawable drawable = new BitmapDrawable(getResources(), thumbnail);
-                target.bindDrawable(drawable);
+                if (getActivity() != null) {
+                    Drawable drawable = new BitmapDrawable(getResources(), thumbnail);
+                    target.bindDrawable(drawable);
+                }
             }
         });
         mThumbnailDownloader.start();
@@ -174,6 +174,13 @@ public class PhotoGalleryFragment extends Fragment {
                 searchView.setQuery(query, false);
             }
         });
+
+        MenuItem toggleItem = menu.findItem(R.id.menu_item_toggle_polling);
+        if (PollService.isServiceAlarm(getActivity())) {
+            toggleItem.setTitle(R.string.stop_polling);
+        } else {
+            toggleItem.setTitle(R.string.start_polling);
+        }
     }
 
     @Override
@@ -182,6 +189,11 @@ public class PhotoGalleryFragment extends Fragment {
             case R.id.menu_item_clear:
                 QueryPreferences.setStoredQuery(getActivity(), null);
                 updateItems();
+                return true;
+            case R.id.menu_item_toggle_polling:
+                boolean shouldStartAlarm = !PollService.isServiceAlarm(getActivity());
+                PollService.setServiceAlarm(getActivity(), shouldStartAlarm);
+                getActivity().invalidateOptionsMenu();
                 return true;
             default:
                 return super.onOptionsItemSelected(item);
@@ -254,7 +266,7 @@ public class PhotoGalleryFragment extends Fragment {
             super(itemView);
 
             mItemImageView
-                = (ImageView) itemView.findViewById(R.id.fragment_photo_gallery_image_view);
+                    = (ImageView) itemView.findViewById(R.id.fragment_photo_gallery_image_view);
         }
 
         public void bindDrawable(Drawable drawable) {
